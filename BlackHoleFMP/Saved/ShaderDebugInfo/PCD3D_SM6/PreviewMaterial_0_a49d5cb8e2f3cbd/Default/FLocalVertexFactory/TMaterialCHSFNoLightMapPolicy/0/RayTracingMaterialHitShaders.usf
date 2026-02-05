@@ -1,4 +1,4 @@
-// DebugHash_23c74cd8696c3549c7510624bcc8db7f5232f419e9b18fd7513d990516c2d35f
+// DebugHash_d720bff9a2e85620e2e13cfe6328cece49b96412f51f1ba90bcd6b2c5787fb69
 #line 1 "__UE_FILENAME_SENTINEL"
 struct FHitGroupSystemRootConstants
 {
@@ -4092,7 +4092,7 @@ _Pragma("dxc diagnostic push")
 _Pragma("dxc diagnostic ignored \"-Wall\"") 					_Pragma("dxc diagnostic ignored \"-Wconversion\"") 				_Pragma("dxc diagnostic ignored \"-Wfor-redefinition\"") 		_Pragma("dxc diagnostic ignored \"-Winline-asm\"")				_Pragma("dxc diagnostic ignored \"-Wunsequenced\"")
 float3 CustomExpression0(FMaterialPixelParameters Parameters)
 {
-return ;
+return float4 color = float4(1.0f, 0.0f, 0.0f, 1.0f);;
 }
 _Pragma("dxc diagnostic pop")
 float3 GetMaterialNormalRaw(FPixelMaterialInputs PixelMaterialInputs)

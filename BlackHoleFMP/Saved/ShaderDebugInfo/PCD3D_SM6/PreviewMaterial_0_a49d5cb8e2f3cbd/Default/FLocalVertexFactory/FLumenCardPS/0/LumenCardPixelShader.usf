@@ -3745,7 +3745,7 @@ _Pragma("dxc diagnostic ignored \"-Wall\"") 					_Pragma("dxc diagnostic ignored
 #line 3610 "/Engine/Generated/Material.ush"
 float3 CustomExpression0(FMaterialPixelParameters Parameters)
 {
-return ;
+return float4 color = float4(1.0f, 0.0f, 0.0f, 1.0f);;
 }
 
 #line 3618 "/Engine/Generated/Material.ush"
