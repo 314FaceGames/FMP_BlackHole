@@ -1,0 +1,13 @@
+/NOLOGO
+/errorReport:prompt
+/MACHINE:x64
+/SUBSYSTEM:WINDOWS
+/DEF
+/NAME:"UnrealEditor-FMPBlackHole.dll"
+/IGNORE:4221
+/NODEFAULTLIB
+"H:\FMP\FMP_BlackHole\FMPBlackHole\Intermediate\Build\Win64\x64\FMPBlackHoleEditor\Development\UnrealEd\SharedPCH.UnrealEd.Project.ValApi.Cpp20.h.obj"
+"H:\FMP\FMP_BlackHole\FMPBlackHole\Intermediate\Build\Win64\x64\UnrealEditor\Development\FMPBlackHole\FMPBlackHole.cpp.obj"
+"H:\FMP\FMP_BlackHole\FMPBlackHole\Intermediate\Build\Win64\x64\UnrealEditor\Development\FMPBlackHole\PerModuleInline.gen.cpp.obj"
+"H:\FMP\FMP_BlackHole\FMPBlackHole\Intermediate\Build\Win64\x64\UnrealEditor\Development\FMPBlackHole\Default.rc2.res"
+/OUT:"H:\FMP\FMP_BlackHole\FMPBlackHole\Intermediate\Build\Win64\x64\UnrealEditor\Development\FMPBlackHole\UnrealEditor-FMPBlackHole.lib"

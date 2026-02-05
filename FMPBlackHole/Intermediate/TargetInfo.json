@@ -1,0 +1,14 @@
+{
+	"Targets": [
+		{
+			"Name": "FMPBlackHole",
+			"Path": "..\\Source\\FMPBlackHole.Target.cs",
+			"Type": "Game"
+		},
+		{
+			"Name": "FMPBlackHoleEditor",
+			"Path": "..\\Source\\FMPBlackHoleEditor.Target.cs",
+			"Type": "Editor"
+		}
+	]
+}
