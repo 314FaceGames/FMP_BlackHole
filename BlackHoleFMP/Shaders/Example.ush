@@ -1,0 +1,11 @@
+#pragma once
+
+float HelloWorld()
+{
+    return 1.0;
+}
+
+float ExamplePulse(float amplitude, float speed, float time)
+{
+    return amplitude * (0.5 + 0.5 * sin(time * speed));
+}
