@@ -1,0 +1,5 @@
+
+void BlackHole(inout float4 Color, inout float3 Dir, float3 CameraPosition)
+{
+    return 0;
+}

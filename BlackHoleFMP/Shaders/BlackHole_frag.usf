@@ -1,0 +1,11 @@
+float3 CameraPositionWS = GetCameraWorldPosition();
+float3 CameraVectorWS = GetCameraWorldVector();
+
+
+Color = 0.0;
+Dir = CameraVectorWS;
+
+
+BlackHole(Color, CameraVectorWS, CameraPositionWS);
+
+return Color;
