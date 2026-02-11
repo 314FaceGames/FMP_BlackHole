@@ -1,3 +1,5 @@
-2026/02/10-16:50:57.907 10d74 Reusing MANIFEST C:\Users\dc40054172\OneDrive - DN Colleges Group\Desktop\GitRepos\FMP\FMP_BlackHole\BlackHoleFMP\Saved\webcache_6613\Default\Local Storage\leveldb/MANIFEST-000001
-2026/02/10-16:50:57.910 10d74 Recovering log #17
-2026/02/10-16:50:57.912 10d74 Reusing old log C:\Users\dc40054172\OneDrive - DN Colleges Group\Desktop\GitRepos\FMP\FMP_BlackHole\BlackHoleFMP\Saved\webcache_6613\Default\Local Storage\leveldb/000017.log 
+2026/02/10-19:22:06.990 bc30 Reusing MANIFEST H:\FMP\FMP_BlackHole\BlackHoleFMP\Saved\webcache_6613\Default\Local Storage\leveldb/MANIFEST-000001
+2026/02/10-19:22:06.995 bc30 Recovering log #17
+2026/02/10-19:22:06.996 bc30 Level-0 table #19: started
+2026/02/10-19:22:07.005 bc30 Level-0 table #19: 63342 bytes OK
+2026/02/10-19:22:07.011 bc30 Delete type=0 #17
