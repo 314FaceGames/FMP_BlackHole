@@ -1,4 +1,4 @@
-float3 CameraPositionWS = LWCtoFloat(ResolvedView.WorldCameraOrigin);
+float3 CameraPositionWS = LWCToFloat(ResolvedView.WorldCameraOrigin);
 float3 CameraVectorWS = -Parameters.CameraVector;
 
 
