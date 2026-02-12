@@ -7,7 +7,7 @@ struct BlackHoleProperties
 };
 // Position of Black Hole assumed to be at mesh origin
 
-bool CrossedEventHorizon(float3 RayPos, BlackHoleParameters BHP)
+bool CrossedEventHorizon(float3 RayPos, BlackHoleProperties BHP)
 {
     if( length(RayPos) <= BHP.EventHorizon)
     {
