@@ -1,5 +1,38 @@
+#define STEPS 250
 
-void BlackHole(inout float4 Color, inout float3 Dir, float3 CameraPosition)
+struct BlackHoleProperties
 {
-    return 0;
+    float Mass; //Mass of the Black Hole
+    float EventHorizon; //Black Hole Radius, Mass * 2
+};
+// Position of Black Hole assumed to be at mesh origin
+
+bool CrossedEventHorizon(float3 RayPos, BlackHoleParameters BHP)
+{
+    if( length(RayPos) <= BHP.EventHorizon)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 CameraPosition, BlackHoleProperties BHP)
+{
+    float3 RayPos = CameraPosition;
+    float3 RayDir = Dir;
+
+    //Begin Raymarch
+    for(int i = 0; i < STEPS; i++ )
+    {
+        if(CrossedEventHorizon(RayPos, BHP))
+        {
+            Mask = 0;
+            break;
+        }
+    
+        RayPos += RayDir;
+    }
+
+
 }
