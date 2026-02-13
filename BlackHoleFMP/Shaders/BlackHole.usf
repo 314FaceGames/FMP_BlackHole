@@ -17,11 +17,14 @@ bool CrossedEventHorizon(float3 RayPos, BlackHoleProperties BHP)
     return false;
 }
 
+//Cross product calculation
 float Cross2(float3 A, float3 B)
 {
     return pow((A.y * B.z) - (B.y * A.z), 2.0) + pow((A.z * B.x) - (B.z * A.x), 2.0) + pow((A.x * B.y) - (B.x * A.y), 2.0);
 }
 
+//Gravitational force applied to the ray, based on the distance to the singularity and the mass of the black hole. 
+//The force is applied perpendicular to the ray direction and the vector from the singularity to the ray position, creating a bending effect.
 float3 GravityForce(float3 RayPos, float3 RayDir, BlackHoleProperties BHP)
 {
     RayDir = normalize(RayDir);
@@ -32,7 +35,24 @@ float3 GravityForce(float3 RayPos, float3 RayDir, BlackHoleProperties BHP)
     return (-3.0 * BHP.Mass) / SquaredDistance * Cross2(SingularityToPos, RayDir) * SingularityToPos;
 }
 
+//Checks if the ray has crossed the accretion disk, which is assumed to be in the XY plane at Z=0.
+bool CrossedAccretionDisk(float3 RayStart, float3 RayEnd)
+{
+    return (sign(RayStart.z) != sign(RayEnd.z));
+}
 
+//Find the intersection point of the ray and the plane of the accretion disk, used for visualization.
+float2 GetZIntersect(float3 RayStart, float3 RayEnd)
+{
+    float3 Dir = normalize(RayEnd - RayStart);
+    float RayLength = length(RayEnd - RayStart);
+    float ProjectionDist = abs(RayStart.z) * RayLength / (abs(RayStart.z) + abs(RayEnd.z));
+    float3 Intercept = RayStart + Dir * ProjectionDist;
+
+    return Intercept.xy;
+}
+
+//Black hole RayMarching function
 void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 CameraPosition, BlackHoleProperties BHP)
 {
     float3 RayPos = CameraPosition;
@@ -52,9 +72,23 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
         PreviousPosition = RayPos;
         RayPos += RayDir + GravityForce(RayPos, RayDir, BHP);
         RayDir = normalize(RayPos - PreviousPosition);
+
+        //If the ray crosses the accretion disk, we calculate the intersection point and add it to the color for visualization.
+        if(CrossedAccretionDisk(PreviousPosition, RayPos))
+        {
+            float2 InterceptPos = GetZIntersect(PreviousPosition, RayPos);
+            
+            float Dist = length(InterceptPos);
+            if(Dist > BHP.EventHorizon * 3.0 && Dist < 20.0) //Limit the visualization to a certain distance from the black hole
+            {
+                float4 Viz = 1.0;
+                Color += Viz;
+            }
+            
+        }
         
     }
 
-
+    //After raymarching, the final ray direction is output
     Dir = RayDir;
 }
