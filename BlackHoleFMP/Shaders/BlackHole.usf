@@ -17,10 +17,27 @@ bool CrossedEventHorizon(float3 RayPos, BlackHoleProperties BHP)
     return false;
 }
 
+float Cross2(float3 A, float3 B)
+{
+    return pow((A.y * B.z) - (B.y * A.z), 2.0) + pow((A.z * B.x) - (B.z * A.x), 2.0) + pow((A.x * B.y) - (B.x * A.y), 2.0);
+}
+
+float3 GravityForce(float3 RayPos, float3 RayDir, BlackHoleProperties BHP)
+{
+    RayDir = normalize(RayDir);
+    float DistanceToSingularity = length(RayPos);
+    float SquaredDistance = DistanceToSingularity * DistanceToSingularity;
+    float3 SingularityToPos = normalize(RayPos);
+
+    return (-3.0 * BHP.Mass) / SquaredDistance * Cross2(SingularityToPos, RayDir) * SingularityToPos;
+}
+
+
 void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 CameraPosition, BlackHoleProperties BHP)
 {
     float3 RayPos = CameraPosition;
     float3 RayDir = Dir;
+    float3 PreviousPosition;
 
     //Begin Raymarch
     for(int i = 0; i < STEPS; i++ )
@@ -30,9 +47,14 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
             Mask = 0;
             break;
         }
-    
-        RayPos += RayDir;
+
+        //Gravitational Force is applied to the ray direction, and the ray is marched forward by the new direction
+        PreviousPosition = RayPos;
+        RayPos += RayDir + GravityForce(RayPos, RayDir, BHP);
+        RayDir = normalize(RayPos - PreviousPosition);
+        
     }
 
 
+    Dir = RayDir;
 }
