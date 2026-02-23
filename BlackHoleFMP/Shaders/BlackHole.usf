@@ -81,7 +81,7 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
             float Dist = length(InterceptPos);
             if(Dist > BHP.EventHorizon * 3.0 && Dist < 20.0) //Limit the visualization to a certain distance from the black hole
             {
-                float4 Viz = 1.0;
+                float4 Viz = float4(1.0, 0.0, 0.0, 1.0) * (1.0 - smoothstep(BHP.EventHorizon * 3.0, 20.0, Dist)); //Red color that fades with distance
                 Color += Viz;
             }
             
