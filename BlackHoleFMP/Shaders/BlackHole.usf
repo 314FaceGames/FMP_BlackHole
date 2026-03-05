@@ -5,8 +5,8 @@ struct BlackHoleProperties
     float Mass; //Mass of the Black Hole
     float EventHorizon; //Black Hole Radius, Mass * 2
 };
-// Position of Black Hole assumed to be at mesh origin
 
+// Position of Black Hole assumed to be at mesh origin
 bool CrossedEventHorizon(float3 RayPos, BlackHoleProperties BHP)
 {
     if( length(RayPos) <= BHP.EventHorizon)
