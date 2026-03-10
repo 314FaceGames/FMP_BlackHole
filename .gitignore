@@ -78,3 +78,16 @@ DerivedDataCache/*
 *.ini
 *.log
 *.bin
+
+# Track Houdini assets
+!Houdini/
+!Houdini/**
+!Houdini/DigitalAssets/*.hda
+!Houdini/hip/*.hipnc
+
+# Ignore Houdini temp files
+Houdini/hip/backup/
+Houdini/hip/*.hipnc.bak
+Houdini/hip/houdini.log
+*.hiplc
+*.hip.autosave
