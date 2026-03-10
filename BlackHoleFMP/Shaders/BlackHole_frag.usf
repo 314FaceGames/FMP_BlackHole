@@ -7,8 +7,15 @@ Dir = CameraVectorWS;
 
 BlackHoleProperties BHP;
 Mask = 1.0;
+
 BHP.Mass = Mass;
 BHP.EventHorizon = Mass*2.0;
+BHP.DiskTexture = DiskTexture;
+BHP.DiskTextureSampler = DiskTextureSampler;
+BHP.DiskDensity = DiskDensity;
+BHP.DiskDensityBias = DiskDensityBias;
+BHP.DiskOuterRadius = DiskOuterRadius;
+BHP.DiskInnerRadius = DiskInnerRadius;
 
 
 BlackHole(Color, Mask, CameraVectorWS, CameraPositionWS, BHP);

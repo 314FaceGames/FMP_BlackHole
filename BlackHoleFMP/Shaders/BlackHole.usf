@@ -4,6 +4,15 @@ struct BlackHoleProperties
 {
     float Mass; //Mass of the Black Hole
     float EventHorizon; //Black Hole Radius, Mass * 2
+
+    Texture2D DiskTexture;
+    SamplerState DiskTextureSampler;
+    float DiskDensity;
+    float DiskDensityBias;
+    float DiskOuterRadius;
+    float DiskInnerRadius;
+
+
 };
 
 // Position of Black Hole assumed to be at mesh origin
@@ -52,6 +61,15 @@ float2 GetZIntersect(float3 RayStart, float3 RayEnd)
     return Intercept.xy;
 }
 
+float4 SampleDisk(float2 RayPosition, float MipLevel, BlackHoleProperties BHP)
+{
+    float2 UV = RayPosition / (BHP.DiskOuterRadius * 2.0) - 0.5; //Convert from world position to UV coordinates, assuming the disk is centered at the origin
+
+    float4 DiskSample = BHP.DiskTexture.SampleLevel(BHP.DiskTextureSampler, UV, MipLevel);
+
+    return DiskSample;
+}
+
 //Black hole RayMarching function
 void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 CameraPosition, BlackHoleProperties BHP)
 {
@@ -79,10 +97,9 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
             float2 InterceptPos = GetZIntersect(PreviousPosition, RayPos);
             
             float Dist = length(InterceptPos);
-            if(Dist > BHP.EventHorizon * 3.0 && Dist < 20.0) //Limit the visualization to a certain distance from the black hole
+            if(Dist > BHP.DiskInnerRadius && Dist < BHP.DiskOuterRadius) //Limit the visualization to a certain distance from the black hole
             {
-                float4 Viz = float4(1.0, 0.0, 0.0, 1.0) * (1.0 - smoothstep(BHP.EventHorizon * 3.0, 20.0, Dist)); //Red color that fades with distance
-                Color += Viz;
+                Color += SampleDisk(InterceptPos, 0, BHP);
             }
             
         }
