@@ -1,5 +1,6 @@
 #define STEPS 250
 
+
 struct BlackHoleProperties
 {
     float Mass; //Mass of the Black Hole
@@ -12,8 +13,13 @@ struct BlackHoleProperties
     float DiskOuterRadius;
     float DiskInnerRadius;
 
+    float FogDensity;
+    float FogHeight;
+    float FogExponent;
+
 
 };
+
 
 // Position of Black Hole assumed to be at mesh origin
 bool CrossedEventHorizon(float3 RayPos, BlackHoleProperties BHP)
@@ -26,11 +32,13 @@ bool CrossedEventHorizon(float3 RayPos, BlackHoleProperties BHP)
     return false;
 }
 
+
 //Cross product calculation
 float Cross2(float3 A, float3 B)
 {
     return pow((A.y * B.z) - (B.y * A.z), 2.0) + pow((A.z * B.x) - (B.z * A.x), 2.0) + pow((A.x * B.y) - (B.x * A.y), 2.0);
 }
+
 
 //Gravitational force applied to the ray, based on the distance to the singularity and the mass of the black hole. 
 //The force is applied perpendicular to the ray direction and the vector from the singularity to the ray position, creating a bending effect.
@@ -44,11 +52,13 @@ float3 GravityForce(float3 RayPos, float3 RayDir, BlackHoleProperties BHP)
     return (-3.0 * BHP.Mass) / SquaredDistance * Cross2(SingularityToPos, RayDir) * SingularityToPos;
 }
 
+
 //Checks if the ray has crossed the accretion disk, which is assumed to be in the XY plane at Z=0.
 bool CrossedAccretionDisk(float3 RayStart, float3 RayEnd)
 {
     return (sign(RayStart.z) != sign(RayEnd.z));
 }
+
 
 //Find the intersection point of the ray and the plane of the accretion disk, used for visualization.
 float2 GetZIntersect(float3 RayStart, float3 RayEnd)
@@ -61,14 +71,46 @@ float2 GetZIntersect(float3 RayStart, float3 RayEnd)
     return Intercept.xy;
 }
 
+
+bool InFogVolume(float3 RayPos, BlackHoleProperties BHP)
+{
+    float Dist = length(RayPos.xy);
+    return ( Dist > BHP.DiskInnerRadius && Dist < BHP.DiskOuterRadius && abs(RayPos.z) < BHP.FogHeight);
+}
+
+
+float SampleFogDensity(float3 RayPos, BlackHoleProperties BHP)
+{
+    float f = 1.0 - (abs(RayPos.z) / BHP.FogHeight);
+    return saturate( pow(f, BHP.FogExponent) * BHP.FogDensity);
+
+}
+
+
+void StepRay(inout float3 RayPos, inout float3 RayDir, out float3 PreviousPosition, BlackHoleProperties BHP)
+{
+        //Sore Previous position
+        PreviousPosition = RayPos;
+        
+        //Calculate new ray position and direction based on gravitational force
+        RayPos += RayDir + GravityForce(RayPos, RayDir, BHP);
+        RayDir = normalize(RayPos - PreviousPosition);
+}
+
+
 float4 SampleDisk(float2 RayPosition, float MipLevel, BlackHoleProperties BHP)
 {
     float2 UV = RayPosition / (BHP.DiskOuterRadius * 2.0) - 0.5; //Convert from world position to UV coordinates, assuming the disk is centered at the origin
 
     float4 DiskSample = BHP.DiskTexture.SampleLevel(BHP.DiskTextureSampler, UV, MipLevel);
 
-    return DiskSample;
+    float Density = saturate(DiskSample.x - BHP.DiskDensityBias);
+    Density *= (1.0 / (1.0 - BHP.DiskDensityBias)); //Remap density to be between 0 and 1 based on the bias value
+    Density *= BHP.DiskDensity; //Apply overall density multiplier
+
+    return Density;
 }
+
 
 //Black hole RayMarching function
 void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 CameraPosition, BlackHoleProperties BHP)
@@ -86,22 +128,23 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
             break;
         }
 
-        //Gravitational Force is applied to the ray direction, and the ray is marched forward by the new direction
-        PreviousPosition = RayPos;
-        RayPos += RayDir + GravityForce(RayPos, RayDir, BHP);
-        RayDir = normalize(RayPos - PreviousPosition);
+        StepRay(RayPos, RayDir, PreviousPosition, BHP);
 
-        //If the ray crosses the accretion disk, we calculate the intersection point and add it to the color for visualization.
-        if(CrossedAccretionDisk(PreviousPosition, RayPos))
+        float DensitySample = 0;
+        if(InFogVolume(RayPos, BHP))
         {
-            float2 InterceptPos = GetZIntersect(PreviousPosition, RayPos);
-            
-            float Dist = length(InterceptPos);
-            if(Dist > BHP.DiskInnerRadius && Dist < BHP.DiskOuterRadius) //Limit the visualization to a certain distance from the black hole
+            float FogSample = SampleFogDensity(RayPos, BHP);
+            float DiskSample = 0;
+
+            if(CrossedAccretionDisk(PreviousPosition, RayPos))
             {
-                Color += SampleDisk(InterceptPos, 0, BHP);
+                float2 InterceptPos = GetZIntersect(PreviousPosition, RayPos);
+                DiskSample = SampleDisk(InterceptPos, 0, BHP);
             }
-            
+
+            DensitySample = FogSample + DiskSample;
+
+            Color += DensitySample;
         }
         
     }
