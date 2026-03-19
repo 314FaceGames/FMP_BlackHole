@@ -17,6 +17,10 @@ struct BlackHoleProperties
     float FogHeight;
     float FogExponent;
 
+    //Interior Occlusion Properties
+    float OcclusionInnerRadius; //Objects inside this radius are occluded
+    float OcclusionStrength; //How aggressively interiors are hidden (0-1)
+    float3 OccludedColor; //Color of occluded objects (typically black)
 
 };
 
@@ -119,6 +123,8 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
     float3 RayDir = Dir;
     float3 PreviousPosition;
 
+    float Transmittance = 1.0;
+
     //Begin Raymarch
     for(int i = 0; i < STEPS; i++ )
     {
@@ -134,7 +140,7 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
         if(InFogVolume(RayPos, BHP))
         {
             float FogSample = SampleFogDensity(RayPos, BHP);
-            FogSample *= SampleDisk(RayPos.xy, 5, BHP); //Modulate fog density by disk texture to create variation in the fog based on the underlying accretion disk
+            FogSample *= SampleDisk(RayPos.xy, 5, BHP);
 
             float DiskSample = 0;
 
@@ -146,11 +152,16 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
 
             DensitySample = FogSample + DiskSample;
 
+            Transmittance *= saturate(1.0 - DensitySample);
+            if(Transmittance < 0.0001) break;
+
             Color += DensitySample;
         }
         
     }
 
     //After raymarching, the final ray direction is output
+    float3 DiskColor = 1.0;
+    Color = float4(DiskColor, 1.0 - Transmittance);
     Dir = RayDir;
 }
