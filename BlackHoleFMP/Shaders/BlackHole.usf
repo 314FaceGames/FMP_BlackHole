@@ -134,6 +134,8 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
         if(InFogVolume(RayPos, BHP))
         {
             float FogSample = SampleFogDensity(RayPos, BHP);
+            FogSample *= SampleDisk(RayPos.xy, 5, BHP); //Modulate fog density by disk texture to create variation in the fog based on the underlying accretion disk
+
             float DiskSample = 0;
 
             if(CrossedAccretionDisk(PreviousPosition, RayPos))

@@ -20,7 +20,11 @@ BHP.FogDensity = FogDensity;
 BHP.FogHeight = FogHeight;
 BHP.FogExponent = FogExponent;
 
+float3 InitPos = CameraPositionWS;
+float3 InitDir = CameraVectorWS;
 
-BlackHole(Color, Mask, Dir, CameraPositionWS, BHP);
+Dir = CameraVectorWS;
+
+BlackHole(Color, Mask, Dir, InitPos, BHP);
 
 return 1.0;
