@@ -17,10 +17,9 @@ struct BlackHoleProperties
     float FogHeight;
     float FogExponent;
 
-    //Interior Occlusion Properties
-    float OcclusionInnerRadius; //Objects inside this radius are occluded
-    float OcclusionStrength; //How aggressively interiors are hidden (0-1)
-    float3 OccludedColor; //Color of occluded objects (typically black)
+    float3 LightColor;
+    float LightIntensity;
+    float LightBias;
 
 };
 
@@ -91,6 +90,14 @@ float SampleFogDensity(float3 RayPos, BlackHoleProperties BHP)
 }
 
 
+float CalculateLighting(float3 RayPos, BlackHoleProperties BHP)
+{
+    float distance = max(0.0, length(RayPos) - BHP.LightBias);
+    float result = 1.0 / (distance * distance);
+    return min(result, 1000);
+}
+
+
 void StepRay(inout float3 RayPos, inout float3 RayDir, out float3 PreviousPosition, BlackHoleProperties BHP)
 {
         //Sore Previous position
@@ -124,6 +131,7 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
     float3 PreviousPosition;
 
     float Transmittance = 1.0;
+    float3 RayColor = 0.0;
 
     //Begin Raymarch
     for(int i = 0; i < STEPS; i++ )
@@ -136,13 +144,14 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
 
         StepRay(RayPos, RayDir, PreviousPosition, BHP);
 
-        float DensitySample = 0;
+        float DensitySample = 0; 
         if(InFogVolume(RayPos, BHP))
         {
             float FogSample = SampleFogDensity(RayPos, BHP);
             FogSample *= SampleDisk(RayPos.xy, 5, BHP);
 
             float DiskSample = 0;
+            float3 LightEnergy = CalculateLighting(RayPos, BHP) * BHP.LightColor * BHP.LightIntensity;
 
             if(CrossedAccretionDisk(PreviousPosition, RayPos))
             {
@@ -153,15 +162,13 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
             DensitySample = FogSample + DiskSample;
 
             Transmittance *= saturate(1.0 - DensitySample);
+            RayColor += LightEnergy * Transmittance * DensitySample;
             if(Transmittance < 0.0001) break;
-
-            Color += DensitySample;
         }
         
     }
 
     //After raymarching, the final ray direction is output
-    float3 DiskColor = 1.0;
-    Color = float4(DiskColor, 1.0 - Transmittance);
+    Color = float4(RayColor, 1.0 - Transmittance);
     Dir = RayDir;
 }

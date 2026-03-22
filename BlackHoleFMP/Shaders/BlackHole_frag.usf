@@ -19,11 +19,18 @@ BHP.DiskInnerRadius = DiskInnerRadius;
 BHP.FogDensity = FogDensity;
 BHP.FogHeight = FogHeight;
 BHP.FogExponent = FogExponent;
+BHP.LightColor = LightColor;
+BHP.LightIntensity = LightIntensity;
+BHP.LightBias = LightBias;
+
+int3 randpos = int3(Parameters.SvPosition.xy, ViewStateFrameIndexMod8);
+float rand = float(Rand3DPCG16(randpos).x) / 0xffff;
 
 float3 InitPos = CameraPositionWS;
 float3 InitDir = CameraVectorWS;
 
 Dir = CameraVectorWS;
+InitPos += InitDir * rand * JitterAmount;
 
 BlackHole(Color, Mask, Dir, InitPos, BHP);
 
