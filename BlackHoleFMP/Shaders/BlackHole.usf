@@ -1,4 +1,5 @@
 #define STEPS 250
+#define SHADOWSTEPS 8
 
 
 struct BlackHoleProperties
@@ -20,6 +21,10 @@ struct BlackHoleProperties
     float3 LightColor;
     float LightIntensity;
     float LightBias;
+
+    float3 ShadowColor;
+    float ShadowDensity;
+    float ShadowStepSize;
 
 };
 
@@ -147,22 +152,52 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
         float DensitySample = 0; 
         if(InFogVolume(RayPos, BHP))
         {
+            //Sample Fog
             float FogSample = SampleFogDensity(RayPos, BHP);
             FogSample *= SampleDisk(RayPos.xy, 5, BHP);
 
-            float DiskSample = 0;
+            //Light Energy Calculation
             float3 LightEnergy = CalculateLighting(RayPos, BHP) * BHP.LightColor * BHP.LightIntensity;
+
+            float DiskSample = 0;
+            float ShadowAccumulation = 0;
 
             if(CrossedAccretionDisk(PreviousPosition, RayPos))
             {
+                //Get Intercept Position
                 float2 InterceptPos = GetZIntersect(PreviousPosition, RayPos);
+
+                //Sample Disk Density
                 DiskSample = SampleDisk(InterceptPos, 0, BHP);
+
+                //Lighting
+                //Initialise Lighting Variables
+                float2 LightingPos = InterceptPos;
+                float2 LightDir = normalize(-LightingPos);
+                if(DiskSample > 0.0001)
+                {
+                    //Shadow Loop
+                    for(int j = 0; j < SHADOWSTEPS; j++)
+                    {
+                        //InFogVolumeCheck before shadows
+                        if(InFogVolume(float3(LightingPos.xy, 0.0), BHP))
+                        {
+                            //Sample Density at lighting pos, accumulate and step position forwards along the ray
+                            float LightSample = BHP.FogDensity * SampleDisk(LightingPos, 6, BHP);
+                            LightSample += SampleDisk(LightingPos, 0, BHP);
+                            ShadowAccumulation += LightSample;
+                            LightingPos += LightDir * BHP.ShadowStepSize;
+                        }
+                    }
+                }
             }
 
             DensitySample = FogSample + DiskSample;
 
+            float3 Absorption = exp(-ShadowAccumulation * BHP.ShadowDensity * BHP.ShadowColor) * DensitySample;
+            
+            RayColor += LightEnergy * Transmittance * DensitySample * Absorption;
             Transmittance *= saturate(1.0 - DensitySample);
-            RayColor += LightEnergy * Transmittance * DensitySample;
             if(Transmittance < 0.0001) break;
         }
         
