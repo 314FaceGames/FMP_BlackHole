@@ -183,7 +183,7 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
                         if(InFogVolume(float3(LightingPos.xy, 0.0), BHP))
                         {
                             //Sample Density at lighting pos, accumulate and step position forwards along the ray
-                            float LightSample = BHP.FogDensity * SampleDisk(LightingPos, 6, BHP);
+                            float LightSample = BHP.FogDensity * SampleDisk(LightingPos, 0, BHP);
                             LightSample += SampleDisk(LightingPos, 0, BHP);
                             ShadowAccumulation += LightSample;
                             LightingPos += LightDir * BHP.ShadowStepSize;

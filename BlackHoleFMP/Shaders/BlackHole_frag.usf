@@ -1,9 +1,22 @@
 float3 CameraPositionWS = LWCToFloat(ResolvedView.WorldCameraOrigin);
 float3 CameraVectorWS = -Parameters.CameraVector;
 
+//World to Local
+FLWCInverseMatrix WorldToLocal = GetWorldToInstance(Parameters);
+// Manual matrix multiplication: Transform camera position
+float3 Scale = LWCMultiplyVector(float3(1.0, 0, 0), GetInstanceToWorld(Parameters));
+float3 WorldPos = LWCToFloat(ResolvedView.WorldCameraOrigin);
+float3 CameraPositionLS = (WorldPos.xxx * WorldToLocal.M[0].xyz + 
+                          WorldPos.yyy * WorldToLocal.M[1].xyz + 
+                          WorldPos.zzz * WorldToLocal.M[2].xyz) + 
+                          WorldToLocal.M[3].xyz;
+
+// Manual matrix multiplication: Transform camera direction (rotation only, ignore translation)
+float3 CameraVectorLS = (CameraVectorWS.xxx * WorldToLocal.M[0].xyz + 
+                        CameraVectorWS.yyy * WorldToLocal.M[1].xyz + 
+                        CameraVectorWS.zzz * WorldToLocal.M[2].xyz);
 
 Color = 0.0;
-Dir = CameraVectorWS;
 
 BlackHoleProperties BHP;
 Mask = 1.0;
@@ -29,11 +42,11 @@ BHP.ShadowStepSize = ShadowStepSize;
 int3 randpos = int3(Parameters.SvPosition.xy, View.StateFrameIndexMod8);
 float rand = float(Rand3DPCG16(randpos).x) / 0xffff;
 
-float3 InitPos = CameraPositionWS;
-float3 InitDir = CameraVectorWS;
+float3 InitPos = CameraPositionLS;
+float3 InitDir = CameraVectorLS;
 
-Dir = CameraVectorWS;
-InitPos += InitDir * rand * JitterAmount;
+Dir = InitDir;
+InitPos += InitDir * rand * JitterAmount * Scale.x;
 
 BlackHole(Color, Mask, Dir, InitPos, BHP);
 
