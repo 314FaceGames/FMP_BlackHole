@@ -1,5 +1,6 @@
 #define STEPS 250
 #define SHADOWSTEPS 8
+#define PI2 6.28318530718
 
 
 struct BlackHoleProperties
@@ -26,6 +27,9 @@ struct BlackHoleProperties
     float ShadowDensity;
     float ShadowStepSize;
 
+    float OrbitalBandSize;
+    float AnimationScale;
+    float AnimExponent;
 };
 
 
@@ -79,6 +83,16 @@ float2 GetZIntersect(float3 RayStart, float3 RayEnd)
     return Intercept.xy;
 }
 
+void StepRay(inout float3 RayPos, inout float3 RayDir, out float3 PreviousPosition, BlackHoleProperties BHP)
+{
+        //Store Previous position
+        PreviousPosition = RayPos;
+        
+        //Calculate new ray position and direction based on gravitational force
+        RayPos += RayDir + GravityForce(RayPos, RayDir, BHP);
+        RayDir = normalize(RayPos - PreviousPosition);
+}
+
 
 bool InFogVolume(float3 RayPos, BlackHoleProperties BHP)
 {
@@ -103,26 +117,51 @@ float CalculateLighting(float3 RayPos, BlackHoleProperties BHP)
 }
 
 
-void StepRay(inout float3 RayPos, inout float3 RayDir, out float3 PreviousPosition, BlackHoleProperties BHP)
+float2 RotateUV(float2 UV, float2 Pivot, float Speed)
 {
-        //Sore Previous position
-        PreviousPosition = RayPos;
-        
-        //Calculate new ray position and direction based on gravitational force
-        RayPos += RayDir + GravityForce(RayPos, RayDir, BHP);
-        RayDir = normalize(RayPos - PreviousPosition);
-}
+    float Time = View.GameTime * Speed;
+    float2x2 rot = { cos(Time), -sin(Time),  //Row 1
+                     sin(Time), cos(Time) }; //Row 2
 
+    UV = mul(UV + Pivot, rot);
+
+    return UV - Pivot;
+}
 
 float4 SampleDisk(float2 RayPosition, float MipLevel, BlackHoleProperties BHP)
 {
-    float2 UV = RayPosition / (BHP.DiskOuterRadius * 2.0) - 0.5; //Convert from world position to UV coordinates, assuming the disk is centered at the origin
+    //Number of Orbital Bands
+    float OrbitalBands = BHP.DiskOuterRadius / BHP.OrbitalBandSize;
 
-    float4 DiskSample = BHP.DiskTexture.SampleLevel(BHP.DiskTextureSampler, UV, MipLevel);
+    //Distances
+    float Radius = max(0.0, length(RayPosition) - BHP.EventHorizon);
+    float RadiusOffset = Radius + BHP.OrbitalBandSize * 0.5;
 
-    float Density = saturate(DiskSample.x - BHP.DiskDensityBias);
-    Density *= (1.0 / (1.0 - BHP.DiskDensityBias)); //Remap density to be between 0 and 1 based on the bias value
-    Density *= BHP.DiskDensity; //Apply overall density multiplier
+    //Bands
+    float Bands = ceil(Radius / BHP.OrbitalBandSize) / OrbitalBands;
+    float Bands_Offset = ceil(RadiusOffset / BHP.OrbitalBandSize) / OrbitalBands;
+    Bands_Offset += 0.5 / OrbitalBands;
+
+    //Velocities
+    float OrbitalVelocity = sqrt( BHP.Mass / pow(Bands, BHP.AnimExponent));
+    float OrbitalVelocityOffset = sqrt(BHP.Mass / pow(Bands_Offset, BHP.AnimExponent));
+
+    //UVs
+    float2 UV = RayPosition / (BHP.DiskOuterRadius * 2.0) - 0.5; 
+    float2 UV1 = RotateUV(UV, 0.5, OrbitalVelocity * BHP.AnimationScale);
+    float2 UV2 = RotateUV(UV, 0.5, OrbitalVelocityOffset * BHP.AnimationScale);
+
+    float4 DiskSample1 = BHP.DiskTexture.SampleLevel(BHP.DiskTextureSampler, UV1, MipLevel);
+    float4 DiskSample2 = BHP.DiskTexture.SampleLevel(BHP.DiskTextureSampler, UV2, MipLevel);
+
+    //Remap Radius for BlendMask
+    float RadiusRemap = (Radius / BHP.OrbitalBandSize - 0.25) * PI2;
+    float BandMask = sin(RadiusRemap) * 0.5 + 0.5;
+
+    float Density = lerp(DiskSample2.x, DiskSample1.x, BandMask);
+    Density = saturate(Density - BHP.DiskDensityBias);
+    Density *= (1.0 / (1.0 - BHP.DiskDensityBias));
+    Density *= BHP.DiskDensity;
 
     return Density;
 }
@@ -154,7 +193,7 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
         {
             //Sample Fog
             float FogSample = SampleFogDensity(RayPos, BHP);
-            FogSample *= SampleDisk(RayPos.xy, 5, BHP);
+            FogSample *= SampleDisk(RayPos.xy, 2, BHP);
 
             //Light Energy Calculation
             float3 LightEnergy = CalculateLighting(RayPos, BHP) * BHP.LightColor * BHP.LightIntensity;
