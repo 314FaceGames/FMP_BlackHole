@@ -1,5 +1,5 @@
-#define STEPS 250
-#define SHADOWSTEPS 8
+#define STEPS 450
+#define SHADOWSTEPS 6
 #define PI2 6.28318530718
 
 
@@ -26,10 +26,14 @@ struct BlackHoleProperties
     float3 ShadowColor;
     float ShadowDensity;
     float ShadowStepSize;
+    float ShadowSpread;
 
     float OrbitalBandSize;
     float AnimationScale;
     float AnimExponent;
+
+    Texture2D AtlasTexture;
+    SamplerState AtlasTextureSampler;
 };
 
 
@@ -140,7 +144,7 @@ float4 SampleDisk(float2 RayPosition, float MipLevel, BlackHoleProperties BHP)
     //Bands
     float Bands = ceil(Radius / BHP.OrbitalBandSize) / OrbitalBands;
     float Bands_Offset = ceil(RadiusOffset / BHP.OrbitalBandSize) / OrbitalBands;
-    Bands_Offset += 0.5 / OrbitalBands;
+    Bands_Offset -= 0.5 / OrbitalBands;
 
     //Velocities
     float OrbitalVelocity = sqrt( BHP.Mass / pow(Bands, BHP.AnimExponent));
@@ -163,7 +167,13 @@ float4 SampleDisk(float2 RayPosition, float MipLevel, BlackHoleProperties BHP)
     Density *= (1.0 / (1.0 - BHP.DiskDensityBias));
     Density *= BHP.DiskDensity;
 
-    return Density;
+    float AtlasUV = saturate(length(RayPosition) / (BHP.DiskOuterRadius - BHP.DiskInnerRadius));
+    AtlasUV += (Density - 0.5) * 0.5;
+    float4 DiskColor = BHP.AtlasTexture.SampleLevel(BHP.AtlasTextureSampler, float2(AtlasUV, 0.5), 0);
+    
+
+
+    return float4(DiskColor.xyz, Density);
 }
 
 
@@ -193,12 +203,15 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
         {
             //Sample Fog
             float FogSample = SampleFogDensity(RayPos, BHP);
-            FogSample *= SampleDisk(RayPos.xy, 2, BHP);
+            float4 FogDiskSample = SampleDisk(RayPos.xy, 6, BHP);
+            FogSample *= FogDiskSample.w;
 
             //Light Energy Calculation
             float3 LightEnergy = CalculateLighting(RayPos, BHP) * BHP.LightColor * BHP.LightIntensity;
+            float3 FogEnergy = LightEnergy * FogDiskSample.xyz;
 
-            float DiskSample = 0;
+            float3 DiskEnergy = 0;
+            float4 DiskSample = 0;
             float ShadowAccumulation = 0;
 
             if(CrossedAccretionDisk(PreviousPosition, RayPos))
@@ -208,34 +221,36 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
 
                 //Sample Disk Density
                 DiskSample = SampleDisk(InterceptPos, 0, BHP);
+                DiskEnergy = LightEnergy * DiskSample.xyz;
 
                 //Lighting
                 //Initialise Lighting Variables
                 float2 LightingPos = InterceptPos;
                 float2 LightDir = normalize(-LightingPos);
-                if(DiskSample > 0.0001)
+                if(DiskSample.w > 0.0001)
                 {
                     //Shadow Loop
-                    for(int j = 0; j < SHADOWSTEPS; j++)
+                    for(int j = 0; j<SHADOWSTEPS; j++)
                     {
                         //InFogVolumeCheck before shadows
                         if(InFogVolume(float3(LightingPos.xy, 0.0), BHP))
                         {
-                            //Sample Density at lighting pos, accumulate and step position forwards along the ray
-                            float LightSample = BHP.FogDensity * SampleDisk(LightingPos, 0, BHP);
-                            LightSample += SampleDisk(LightingPos, 0, BHP);
-                            ShadowAccumulation += LightSample;
+                            float LightSampleFog = BHP.FogDensity * SampleDisk(LightingPos, 6, BHP).w;
+                            float LightSampleDisk = SampleDisk(LightingPos, j*(BHP.ShadowSpread), BHP).w;
+
+                            ShadowAccumulation += LightSampleFog + LightSampleDisk;
                             LightingPos += LightDir * BHP.ShadowStepSize;
                         }
                     }
                 }
             }
 
-            DensitySample = FogSample + DiskSample;
+            DensitySample = FogSample + DiskSample.w;
 
             float3 Absorption = exp(-ShadowAccumulation * BHP.ShadowDensity * BHP.ShadowColor) * DensitySample;
-            
-            RayColor += LightEnergy * Transmittance * DensitySample * Absorption;
+
+            RayColor += FogEnergy * Transmittance * DensitySample * Absorption;
+            RayColor += DiskEnergy * Transmittance * DensitySample * Absorption;
             Transmittance *= saturate(1.0 - DensitySample);
             if(Transmittance < 0.0001) break;
         }
