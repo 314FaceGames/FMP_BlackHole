@@ -104,12 +104,31 @@ bool InFogVolume(float3 RayPos, BlackHoleProperties BHP)
     return ( Dist > BHP.DiskInnerRadius && Dist < BHP.DiskOuterRadius && abs(RayPos.z) < BHP.FogHeight);
 }
 
+float DiskMask(float3 RayPos, BlackHoleProperties BHP)
+{
+    float Dist = length(RayPos);
+
+    float OuterMask = 1.0 - Dist / BHP.DiskOuterRadius;
+
+    float InnerMaskFalloff = 0.125;
+    float InnerMask = saturate((Dist - BHP.DiskInnerRadius) * InnerMaskFalloff);
+
+    return OuterMask * InnerMask;
+}
+
 
 float SampleFogDensity(float3 RayPos, BlackHoleProperties BHP)
 {
     float f = 1.0 - (abs(RayPos.z) / BHP.FogHeight);
-    return saturate( pow(f, BHP.FogExponent) * BHP.FogDensity);
+    float F = max(0.0, pow(f, BHP.FogExponent) * BHP.FogDensity);
+    return F * DiskMask(RayPos, BHP);
+}
 
+float DensityAttenuation(float3 RayPos, BlackHoleProperties BHP)
+{
+    float f = 1.0 - (abs(RayPos.z) / BHP.FogHeight);
+    float DensityAttenuationExponent = BHP.FogExponent * 2.0;
+    return 1.0 - saturate(pow(f, DensityAttenuationExponent));
 }
 
 
@@ -119,6 +138,17 @@ float CalculateLighting(float3 RayPos, BlackHoleProperties BHP)
     float result = 1.0 / (distance * distance);
     return min(result, 1000);
 }
+
+float RemapValueRange(float Input, float InputLow, float InputHigh, float TargetLow, float TargetHigh)
+{
+
+    float result = (Input - InputLow) / (InputHigh - InputLow);
+    result *= TargetHigh - TargetLow;
+    result += TargetLow;
+
+    return clamp(result, TargetLow, TargetHigh);
+}
+
 
 
 float2 RotateUV(float2 UV, float2 Pivot, float Speed)
@@ -132,13 +162,15 @@ float2 RotateUV(float2 UV, float2 Pivot, float Speed)
     return UV - Pivot;
 }
 
-float4 SampleDisk(float2 RayPosition, float MipLevel, BlackHoleProperties BHP)
+
+float4 SampleDisk(float3 RayPosition, float MipLevel, BlackHoleProperties BHP)
 {
+    float Distance = length(RayPosition);
     //Number of Orbital Bands
     float OrbitalBands = BHP.DiskOuterRadius / BHP.OrbitalBandSize;
 
     //Distances
-    float Radius = max(0.0, length(RayPosition) - BHP.EventHorizon);
+    float Radius = max(0.0, Distance - BHP.EventHorizon);
     float RadiusOffset = Radius + BHP.OrbitalBandSize * 0.5;
 
     //Bands
@@ -151,7 +183,7 @@ float4 SampleDisk(float2 RayPosition, float MipLevel, BlackHoleProperties BHP)
     float OrbitalVelocityOffset = sqrt(BHP.Mass / pow(Bands_Offset, BHP.AnimExponent));
 
     //UVs
-    float2 UV = RayPosition / (BHP.DiskOuterRadius * 2.0) - 0.5; 
+    float2 UV = RayPosition.xy / (BHP.DiskOuterRadius * 2.0) - 0.5; 
     float2 UV1 = RotateUV(UV, 0.5, OrbitalVelocity * BHP.AnimationScale);
     float2 UV2 = RotateUV(UV, 0.5, OrbitalVelocityOffset * BHP.AnimationScale);
 
@@ -162,16 +194,28 @@ float4 SampleDisk(float2 RayPosition, float MipLevel, BlackHoleProperties BHP)
     float RadiusRemap = (Radius / BHP.OrbitalBandSize - 0.25) * PI2;
     float BandMask = sin(RadiusRemap) * 0.5 + 0.5;
 
-    float Density = lerp(DiskSample2.x, DiskSample1.x, BandMask);
-    Density = saturate(Density - BHP.DiskDensityBias);
-    Density *= (1.0 / (1.0 - BHP.DiskDensityBias));
-    Density *= BHP.DiskDensity;
-
-    float AtlasUV = saturate(length(RayPosition) / (BHP.DiskOuterRadius - BHP.DiskInnerRadius));
-    AtlasUV += (Density - 0.5) * 0.5;
-    float4 DiskColor = BHP.AtlasTexture.SampleLevel(BHP.AtlasTextureSampler, float2(AtlasUV, 0.5), 0);
+    //Blend Disk Samples for final disk density
+    float Disk = lerp(DiskSample2.x, DiskSample1.x, BandMask);
     
+    //Calculate UVs for atlas texture
+    float AtlasUV = RemapValueRange(Distance, BHP.DiskInnerRadius, BHP.DiskOuterRadius, 0.0, 1.0);
+    AtlasUV += (Disk - 0.5) * 0.5;
 
+    //sample Atlas texture for colour and bias
+    float4 DiskColor = BHP.AtlasTexture.SampleLevel(BHP.AtlasTextureSampler, float2(AtlasUV, 0.5), 0);
+
+    float Attenuation = DensityAttenuation(RayPosition, BHP);
+    float Bias = max(BHP.DiskDensityBias, (1.0 - DiskColor.w));
+
+    //Apply bias
+    float Density = saturate(Disk - Bias);
+    Density *= (1.0 / (1.0 - Bias));
+
+    //Apply Attenuation
+    Density = max(0.0, Density - Attenuation);
+    Density *= Density *= (1.0 / (1.0 - Attenuation));
+
+    Density *= BHP.DiskDensity * DiskMask(RayPosition, BHP);
 
     return float4(DiskColor.xyz, Density);
 }
@@ -203,47 +247,40 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
         {
             //Sample Fog
             float FogSample = SampleFogDensity(RayPos, BHP);
-            float4 FogDiskSample = SampleDisk(RayPos.xy, 6, BHP);
-            FogSample *= FogDiskSample.w;
+            float4 FogDiskSample = SampleDisk(RayPos, 6, BHP);
 
             //Light Energy Calculation
             float3 LightEnergy = CalculateLighting(RayPos, BHP) * BHP.LightColor * BHP.LightIntensity;
             float3 FogEnergy = LightEnergy * FogDiskSample.xyz;
 
-            float3 DiskEnergy = 0;
-            float4 DiskSample = 0;
+        
+            //Sample Disk Density
+            float4 DiskSample = SampleDisk(RayPos, 0, BHP);
+            float3 DiskEnergy = LightEnergy * DiskSample.xyz;
+
+            //Lighting
+            //Initialise Lighting Variables
+            float3 LightingPos = RayPos;
+            float3 LightDir = normalize(-LightingPos);
             float ShadowAccumulation = 0;
 
-            if(CrossedAccretionDisk(PreviousPosition, RayPos))
+            if(DiskSample.w + FogSample > 0.0001)
             {
-                //Get Intercept Position
-                float2 InterceptPos = GetZIntersect(PreviousPosition, RayPos);
-
-                //Sample Disk Density
-                DiskSample = SampleDisk(InterceptPos, 0, BHP);
-                DiskEnergy = LightEnergy * DiskSample.xyz;
-
-                //Lighting
-                //Initialise Lighting Variables
-                float2 LightingPos = InterceptPos;
-                float2 LightDir = normalize(-LightingPos);
-                if(DiskSample.w > 0.0001)
+                //Shadow Loop
+                for(int j = 0; j<SHADOWSTEPS; j++)
                 {
-                    //Shadow Loop
-                    for(int j = 0; j<SHADOWSTEPS; j++)
+                    //InFogVolumeCheck before shadows
+                    if(InFogVolume(LightingPos, BHP))
                     {
-                        //InFogVolumeCheck before shadows
-                        if(InFogVolume(float3(LightingPos.xy, 0.0), BHP))
-                        {
-                            float LightSampleFog = BHP.FogDensity * SampleDisk(LightingPos, 6, BHP).w;
-                            float LightSampleDisk = SampleDisk(LightingPos, j*(BHP.ShadowSpread), BHP).w;
+                        float LightSampleFog = BHP.FogDensity;
+                        float LightSampleDisk = SampleDisk(LightingPos, j*(BHP.ShadowSpread), BHP).w;
 
-                            ShadowAccumulation += LightSampleFog + LightSampleDisk;
-                            LightingPos += LightDir * BHP.ShadowStepSize;
-                        }
+                        ShadowAccumulation += LightSampleFog + LightSampleDisk;
+                        LightingPos += LightDir * BHP.ShadowStepSize;
                     }
                 }
             }
+            
 
             DensitySample = FogSample + DiskSample.w;
 
