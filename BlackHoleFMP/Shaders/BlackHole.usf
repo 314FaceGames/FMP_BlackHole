@@ -1,7 +1,7 @@
 #define STEPS 450
 #define SHADOWSTEPS 6
 #define PI2 6.28318530718
-
+#define ENABLE_GRAVITATIONAL_LENSING 1
 
 struct BlackHoleProperties
 {
@@ -60,12 +60,16 @@ float Cross2(float3 A, float3 B)
 //The force is applied perpendicular to the ray direction and the vector from the singularity to the ray position, creating a bending effect.
 float3 GravityForce(float3 RayPos, float3 RayDir, BlackHoleProperties BHP)
 {
+#if ENABLE_GRAVITATIONAL_LENSING
     RayDir = normalize(RayDir);
     float DistanceToSingularity = length(RayPos);
     float SquaredDistance = DistanceToSingularity * DistanceToSingularity;
     float3 SingularityToPos = normalize(RayPos);
 
     return (-3.0 * BHP.Mass) / SquaredDistance * Cross2(SingularityToPos, RayDir) * SingularityToPos;
+#else
+    return 0.0;
+#endif
 }
 
 
