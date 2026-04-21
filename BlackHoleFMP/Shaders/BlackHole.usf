@@ -1,5 +1,6 @@
 #define STEPS 450
 #define SHADOWSTEPS 6
+#define TRANSMITTANCE_STEPS 16
 #define PI2 6.28318530718
 #define ENABLE_GRAVITATIONAL_LENSING 1
 
@@ -225,8 +226,167 @@ float4 SampleDisk(float3 RayPosition, float MipLevel, BlackHoleProperties BHP)
 }
 
 
+// Lightweight transmittance-only raymarch for shared use (e.g. asteroid material).
+// Marches from CameraPosition to TargetPosition and returns remaining transmittance.
+float ComputeTransmittanceToPoint(float3 CameraPosition, float3 TargetPosition, BlackHoleProperties BHP)
+{
+    float3 RayPos = CameraPosition;
+    float3 RayDir = normalize(TargetPosition - CameraPosition);
+    float TotalRayLength = length(TargetPosition - CameraPosition);
+    float TraveledLength = 0.0;
+    float3 PreviousPosition;
+
+    float Transmittance = 1.0;
+
+    for (int i = 0; i < TRANSMITTANCE_STEPS; i++)
+    {
+        if (TraveledLength >= TotalRayLength)
+        {
+            break;
+        }
+
+        if (CrossedEventHorizon(RayPos, BHP))
+        {
+            return 0.0;
+        }
+
+        StepRay(RayPos, RayDir, PreviousPosition, BHP);
+
+        float StepLength = length(RayPos - PreviousPosition);
+        TraveledLength += StepLength;
+
+        if (InFogVolume(RayPos, BHP))
+        {
+            float FogSample = SampleFogDensity(RayPos, BHP);
+            float DiskDensity = SampleDisk(RayPos, 0, BHP).w;
+            float DensitySample = FogSample + DiskDensity;
+
+            // Beer-Lambert attenuation keeps this stable across step counts.
+            Transmittance *= exp(-DensitySample * StepLength);
+
+            if (Transmittance < 0.0001)
+            {
+                break;
+            }
+        }
+    }
+
+    return saturate(Transmittance);
+}
+
+
+// Straight-line transmittance helper for materials that need stable per-pixel occlusion.
+// This avoids lensing ray bending and is usually better for asteroid opacity masking.
+float ComputeTransmittanceToPointLinear(float3 CameraPosition, float3 TargetPosition, BlackHoleProperties BHP)
+{
+    float3 Segment = TargetPosition - CameraPosition;
+    float TotalRayLength = length(Segment);
+
+    if (TotalRayLength <= 0.0001)
+    {
+        return 1.0;
+    }
+
+    float3 RayDir = Segment / TotalRayLength;
+    float3 ToCenter = -CameraPosition;
+    float BHDepth = dot(ToCenter, RayDir);
+
+    // Only evaluate attenuation in a window around the BH depth to avoid
+    // darkening the entire ray when camera is close to the disk plane.
+    if (BHDepth <= 0.0 || BHDepth >= TotalRayLength)
+    {
+        return 1.0;
+    }
+
+    float WindowHalfSize = BHP.DiskOuterRadius;
+    float StartT = max(0.0, BHDepth - WindowHalfSize);
+    float EndT = min(TotalRayLength, BHDepth + WindowHalfSize);
+
+    if (EndT <= StartT)
+    {
+        return 1.0;
+    }
+
+    float MarchLength = EndT - StartT;
+    float StepLength = MarchLength / TRANSMITTANCE_STEPS;
+    float3 RayPos = CameraPosition + RayDir * StartT;
+    float Transmittance = 1.0;
+
+    for (int i = 0; i < TRANSMITTANCE_STEPS; i++)
+    {
+        RayPos += RayDir * StepLength;
+
+        if (CrossedEventHorizon(RayPos, BHP))
+        {
+            return 0.0;
+        }
+
+        if (InFogVolume(RayPos, BHP))
+        {
+            float FogSample = SampleFogDensity(RayPos, BHP);
+            float DiskDensity = SampleDisk(RayPos, 0, BHP).w;
+            float DensitySample = FogSample + DiskDensity;
+
+            Transmittance *= exp(-DensitySample * StepLength);
+
+            if (Transmittance < 0.0001)
+            {
+                break;
+            }
+        }
+    }
+
+    return saturate(Transmittance);
+}
+
+
+// Full-segment linear transmittance helper.
+// This reproduces the stronger fog-driven asteroid opacity behavior.
+float ComputeTransmittanceToPointLinearFull(float3 CameraPosition, float3 TargetPosition, BlackHoleProperties BHP)
+{
+    float3 Segment = TargetPosition - CameraPosition;
+    float TotalRayLength = length(Segment);
+
+    if (TotalRayLength <= 0.0001)
+    {
+        return 1.0;
+    }
+
+    float3 RayDir = Segment / TotalRayLength;
+    float StepLength = TotalRayLength / TRANSMITTANCE_STEPS;
+    float3 RayPos = CameraPosition;
+    float Transmittance = 1.0;
+
+    for (int i = 0; i < TRANSMITTANCE_STEPS; i++)
+    {
+        RayPos += RayDir * StepLength;
+
+        if (CrossedEventHorizon(RayPos, BHP))
+        {
+            return 0.0;
+        }
+
+        if (InFogVolume(RayPos, BHP))
+        {
+            float FogSample = SampleFogDensity(RayPos, BHP);
+            float DiskDensity = SampleDisk(RayPos, 0, BHP).w;
+            float DensitySample = FogSample + DiskDensity;
+
+            Transmittance *= exp(-DensitySample * StepLength);
+
+            if (Transmittance < 0.0001)
+            {
+                break;
+            }
+        }
+    }
+
+    return saturate(Transmittance);
+}
+
+
 //Black hole RayMarching function
-void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 CameraPosition, BlackHoleProperties BHP)
+void BlackHole(inout float4 Color, inout float Mask, inout float3 Dir, float3 CameraPosition, BlackHoleProperties BHP, out float OutTransmittance)
 {
     float3 RayPos = CameraPosition;
     float3 RayDir = Dir;
@@ -301,4 +461,5 @@ void BlackHole(inout float4 Color,  inout float Mask, inout float3 Dir, float3 C
     //After raymarching, the final ray direction is output
     Color = float4(RayColor, 1.0 - Transmittance);
     Dir = RayDir;
+    OutTransmittance = Transmittance;
 }
