@@ -1,6 +1,3 @@
-#define STEPS 450
-#define SHADOWSTEPS 6
-#define TRANSMITTANCE_STEPS 16
 #define PI2 6.28318530718
 #define ENABLE_GRAVITATIONAL_LENSING 1
 
@@ -35,6 +32,11 @@ struct BlackHoleProperties
 
     Texture2D AtlasTexture;
     SamplerState AtlasTextureSampler;
+
+    float RMSteps;
+    float ShadowSteps;
+    float TransmittanceSteps;
+    bool EnableGL;
 };
 
 
@@ -61,16 +63,16 @@ float Cross2(float3 A, float3 B)
 //The force is applied perpendicular to the ray direction and the vector from the singularity to the ray position, creating a bending effect.
 float3 GravityForce(float3 RayPos, float3 RayDir, BlackHoleProperties BHP)
 {
-#if ENABLE_GRAVITATIONAL_LENSING
-    RayDir = normalize(RayDir);
-    float DistanceToSingularity = length(RayPos);
-    float SquaredDistance = DistanceToSingularity * DistanceToSingularity;
-    float3 SingularityToPos = normalize(RayPos);
+    if (BHP.EnableGL)
+    {
+        RayDir = normalize(RayDir);
+        float DistanceToSingularity = length(RayPos);
+        float SquaredDistance = DistanceToSingularity * DistanceToSingularity;
+        float3 SingularityToPos = normalize(RayPos);
 
-    return (-3.0 * BHP.Mass) / SquaredDistance * Cross2(SingularityToPos, RayDir) * SingularityToPos;
-#else
+        return (-3.0 * BHP.Mass) / SquaredDistance * Cross2(SingularityToPos, RayDir) * SingularityToPos;
+    }
     return 0.0;
-#endif
 }
 
 
@@ -92,6 +94,7 @@ float2 GetZIntersect(float3 RayStart, float3 RayEnd)
     return Intercept.xy;
 }
 
+
 void StepRay(inout float3 RayPos, inout float3 RayDir, out float3 PreviousPosition, BlackHoleProperties BHP)
 {
         //Store Previous position
@@ -108,6 +111,7 @@ bool InFogVolume(float3 RayPos, BlackHoleProperties BHP)
     float Dist = length(RayPos.xy);
     return ( Dist > BHP.DiskInnerRadius && Dist < BHP.DiskOuterRadius && abs(RayPos.z) < BHP.FogHeight);
 }
+
 
 float DiskMask(float3 RayPos, BlackHoleProperties BHP)
 {
@@ -129,6 +133,7 @@ float SampleFogDensity(float3 RayPos, BlackHoleProperties BHP)
     return F * DiskMask(RayPos, BHP);
 }
 
+
 float DensityAttenuation(float3 RayPos, BlackHoleProperties BHP)
 {
     float f = 1.0 - (abs(RayPos.z) / BHP.FogHeight);
@@ -143,6 +148,7 @@ float CalculateLighting(float3 RayPos, BlackHoleProperties BHP)
     float result = 1.0 / (distance * distance);
     return min(result, 1000);
 }
+
 
 float RemapValueRange(float Input, float InputLow, float InputHigh, float TargetLow, float TargetHigh)
 {
@@ -166,6 +172,7 @@ float2 RotateUV(float2 UV, float2 Pivot, float Speed)
 
     return UV - Pivot;
 }
+
 
 
 float4 SampleDisk(float3 RayPosition, float MipLevel, BlackHoleProperties BHP)
@@ -238,7 +245,7 @@ float ComputeTransmittanceToPoint(float3 CameraPosition, float3 TargetPosition, 
 
     float Transmittance = 1.0;
 
-    for (int i = 0; i < TRANSMITTANCE_STEPS; i++)
+    for (int i = 0; i < BHP.TransmittanceSteps; i++)
     {
         if (TraveledLength >= TotalRayLength)
         {
@@ -308,11 +315,11 @@ float ComputeTransmittanceToPointLinear(float3 CameraPosition, float3 TargetPosi
     }
 
     float MarchLength = EndT - StartT;
-    float StepLength = MarchLength / TRANSMITTANCE_STEPS;
+    float StepLength = MarchLength / BHP.TransmittanceSteps;
     float3 RayPos = CameraPosition + RayDir * StartT;
     float Transmittance = 1.0;
 
-    for (int i = 0; i < TRANSMITTANCE_STEPS; i++)
+    for (int i = 0; i < BHP.TransmittanceSteps; i++)
     {
         RayPos += RayDir * StepLength;
 
@@ -353,11 +360,11 @@ float ComputeTransmittanceToPointLinearFull(float3 CameraPosition, float3 Target
     }
 
     float3 RayDir = Segment / TotalRayLength;
-    float StepLength = TotalRayLength / TRANSMITTANCE_STEPS;
+    float StepLength = TotalRayLength / BHP.TransmittanceSteps;
     float3 RayPos = CameraPosition;
     float Transmittance = 1.0;
 
-    for (int i = 0; i < TRANSMITTANCE_STEPS; i++)
+    for (int i = 0; i < BHP.TransmittanceSteps; i++)
     {
         RayPos += RayDir * StepLength;
 
@@ -385,6 +392,7 @@ float ComputeTransmittanceToPointLinearFull(float3 CameraPosition, float3 Target
 }
 
 
+
 //Black hole RayMarching function
 void BlackHole(inout float4 Color, inout float Mask, inout float3 Dir, float3 CameraPosition, BlackHoleProperties BHP, out float OutTransmittance)
 {
@@ -396,7 +404,7 @@ void BlackHole(inout float4 Color, inout float Mask, inout float3 Dir, float3 Ca
     float3 RayColor = 0.0;
 
     //Begin Raymarch
-    for(int i = 0; i < STEPS; i++ )
+    for(int i = 0; i < BHP.RMSteps; i++ )
     {
         if(CrossedEventHorizon(RayPos, BHP))
         {
@@ -431,7 +439,7 @@ void BlackHole(inout float4 Color, inout float Mask, inout float3 Dir, float3 Ca
             if(DiskSample.w + FogSample > 0.0001)
             {
                 //Shadow Loop
-                for(int j = 0; j<SHADOWSTEPS; j++)
+                for(int j = 0; j<BHP.ShadowSteps; j++)
                 {
                     //InFogVolumeCheck before shadows
                     if(InFogVolume(LightingPos, BHP))
