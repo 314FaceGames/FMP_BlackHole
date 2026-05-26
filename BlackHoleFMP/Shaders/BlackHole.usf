@@ -237,6 +237,53 @@ float4 SampleDisk(float3 RayPosition, float MipLevel, BlackHoleProperties BHP)
 }
 
 
+float SampleDiskDensity(float3 RayPosition, float MipLevel, BlackHoleProperties BHP)
+{
+    float Distance = length(RayPosition);
+    float InvOrbitalBandSize = 1.0 / BHP.OrbitalBandSize;
+    float OrbitalBands = BHP.DiskOuterRadius * InvOrbitalBandSize;
+
+    float Radius = max(0.0, Distance - BHP.EventHorizon);
+    float RadiusOffset = Radius + (BHP.OrbitalBandSize * 0.5);
+
+    float Bands = ceil(Radius * InvOrbitalBandSize) / OrbitalBands;
+    float Bands_Offset = ceil(RadiusOffset * InvOrbitalBandSize) / OrbitalBands;
+    Bands_Offset -= 0.5 / OrbitalBands;
+
+    float OrbitalVelocity = sqrt(BHP.Mass / pow(Bands, BHP.AnimExponent));
+    float OrbitalVelocityOffset = sqrt(BHP.Mass / pow(Bands_Offset, BHP.AnimExponent));
+
+    float2 UV = RayPosition.xy / (BHP.DiskOuterRadius * 2.0) - 0.5;
+    float2 UV1 = RotateUV(UV, 0.5, OrbitalVelocity * BHP.AnimationScale);
+    float2 UV2 = RotateUV(UV, 0.5, OrbitalVelocityOffset * BHP.AnimationScale);
+
+    float4 DiskSample1 = BHP.DiskTexture.SampleLevel(BHP.DiskTextureSampler, UV1, MipLevel);
+    float4 DiskSample2 = BHP.DiskTexture.SampleLevel(BHP.DiskTextureSampler, UV2, MipLevel);
+
+    float RadiusRemap = (Radius * InvOrbitalBandSize - 0.25) * PI2;
+    float BandMask = sin(RadiusRemap) * 0.5 + 0.5;
+    float Disk = lerp(DiskSample2.x, DiskSample1.x, BandMask);
+
+    float AtlasUV = RemapValueRange(Distance, BHP.DiskInnerRadius, BHP.DiskOuterRadius, 0.0, 1.0);
+    AtlasUV += (Disk - 0.5) * 0.5;
+
+    float DiskColorA = BHP.AtlasTexture.SampleLevel(BHP.AtlasTextureSampler, float2(AtlasUV, 0.5), 0).w;
+
+    float Attenuation = DensityAttenuation(RayPosition, BHP);
+    float Bias = max(BHP.DiskDensityBias, (1.0 - DiskColorA));
+
+    float Density = saturate(Disk - Bias);
+    Density *= (1.0 / (1.0 - Bias));
+
+    Density = max(0.0, Density - Attenuation);
+    Density *= (1.0 / (1.0 - Attenuation));
+
+    Density *= BHP.DiskDensity * DiskMask(RayPosition, BHP);
+
+    return Density;
+}
+
+
 // Lightweight transmittance-only raymarch for shared use (e.g. asteroid material).
 // Marches from CameraPosition to TargetPosition and returns remaining transmittance.
 float ComputeTransmittanceToPoint(float3 CameraPosition, float3 TargetPosition, BlackHoleProperties BHP)
@@ -269,7 +316,7 @@ float ComputeTransmittanceToPoint(float3 CameraPosition, float3 TargetPosition, 
         if (InFogVolume(RayPos, BHP))
         {
             float FogSample = SampleFogDensity(RayPos, BHP);
-            float DiskDensity = SampleDisk(RayPos, 0, BHP).w;
+            float DiskDensity = SampleDiskDensity(RayPos, 0, BHP);
             float DensitySample = FogSample + DiskDensity;
 
             // Beer-Lambert attenuation keeps this stable across step counts.
@@ -335,7 +382,7 @@ float ComputeTransmittanceToPointLinear(float3 CameraPosition, float3 TargetPosi
         if (InFogVolume(RayPos, BHP))
         {
             float FogSample = SampleFogDensity(RayPos, BHP);
-            float DiskDensity = SampleDisk(RayPos, 0, BHP).w;
+            float DiskDensity = SampleDiskDensity(RayPos, 0, BHP);
             float DensitySample = FogSample + DiskDensity;
 
             Transmittance *= exp(-DensitySample * StepLength);
@@ -380,7 +427,7 @@ float ComputeTransmittanceToPointLinearFull(float3 CameraPosition, float3 Target
         if (InFogVolume(RayPos, BHP))
         {
             float FogSample = SampleFogDensity(RayPos, BHP);
-            float DiskDensity = SampleDisk(RayPos, 0, BHP).w;
+            float DiskDensity = SampleDiskDensity(RayPos, 0, BHP);
             float DensitySample = FogSample + DiskDensity;
 
             Transmittance *= exp(-DensitySample * StepLength);
