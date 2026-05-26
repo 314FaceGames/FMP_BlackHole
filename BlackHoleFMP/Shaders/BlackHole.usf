@@ -43,7 +43,8 @@ struct BlackHoleProperties
 // Position of Black Hole assumed to be at mesh origin
 bool CrossedEventHorizon(float3 RayPos, BlackHoleProperties BHP)
 {
-    if( length(RayPos) <= BHP.EventHorizon)
+    float EventHorizonSq = BHP.EventHorizon * BHP.EventHorizon;
+    if (dot(RayPos, RayPos) <= EventHorizonSq)
     {
         return true;
     }
@@ -55,7 +56,8 @@ bool CrossedEventHorizon(float3 RayPos, BlackHoleProperties BHP)
 //Cross product calculation
 float Cross2(float3 A, float3 B)
 {
-    return pow((A.y * B.z) - (B.y * A.z), 2.0) + pow((A.z * B.x) - (B.z * A.x), 2.0) + pow((A.x * B.y) - (B.x * A.y), 2.0);
+    float3 Cross = cross(A, B);
+    return dot(Cross, Cross);
 }
 
 
@@ -108,8 +110,10 @@ void StepRay(inout float3 RayPos, inout float3 RayDir, out float3 PreviousPositi
 
 bool InFogVolume(float3 RayPos, BlackHoleProperties BHP)
 {
-    float Dist = length(RayPos.xy);
-    return ( Dist > BHP.DiskInnerRadius && Dist < BHP.DiskOuterRadius && abs(RayPos.z) < BHP.FogHeight);
+    float DistSq = dot(RayPos.xy, RayPos.xy);
+    float InnerRadiusSq = BHP.DiskInnerRadius * BHP.DiskInnerRadius;
+    float OuterRadiusSq = BHP.DiskOuterRadius * BHP.DiskOuterRadius;
+    return (DistSq > InnerRadiusSq && DistSq < OuterRadiusSq && abs(RayPos.z) < BHP.FogHeight);
 }
 
 
@@ -225,7 +229,7 @@ float4 SampleDisk(float3 RayPosition, float MipLevel, BlackHoleProperties BHP)
 
     //Apply Attenuation
     Density = max(0.0, Density - Attenuation);
-    Density *= Density *= (1.0 / (1.0 - Attenuation));
+    Density *= (1.0 / (1.0 - Attenuation));
 
     Density *= BHP.DiskDensity * DiskMask(RayPosition, BHP);
 
