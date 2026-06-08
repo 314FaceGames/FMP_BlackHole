@@ -91,3 +91,4 @@ Houdini/hip/*.hipnc.bak
 Houdini/hip/houdini.log
 *.hiplc
 *.hip.autosave
+*.exr
